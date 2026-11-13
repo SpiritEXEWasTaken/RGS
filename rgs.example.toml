@@ -1,0 +1,46 @@
+# Copy to rgs.toml next to the server and change what you need. Everything is optional.
+# Settings go above the [[games]] sections at the bottom (TOML puts anything after a
+# [[games]] line into that game).
+
+# Where the server listens. With the website relay (below) it can stay on 127.0.0.1.
+listen = "127.0.0.1:8650"
+
+# Database and the server's secret key go here. Back this folder up.
+data_dir = "data"
+
+# Name shown in authenticator apps next to the account name.
+issuer = "RGS"
+
+# Set to true only when the server sits directly behind Cloudflare's proxy, so rate limiting
+# sees the real client. (Not needed for the website relay.)
+behind_cloudflare = false
+
+# Websites allowed to call the API directly from a browser. Not needed for the RGS website,
+# which goes through the relay.
+allowed_origins = []
+
+session_days = 30          # website logins
+device_session_days = 180  # headset logins (device codes)
+admin_session_hours = 12   # admin panel logins
+
+# Seconds between "rebooting right now" and the server actually stopping.
+restart_grace_seconds = 20
+
+# Link this server to your account on the RGS website. The server then connects out to the
+# website, and the admin panel, player page and games reach it from anywhere, with no ports
+# opened. "Link server" at https://spiritexe.pages.dev/rgs/servers/ gives you
+# both lines. Keep hub_key secret.
+# hub_url = "https://spiritexe.pages.dev/rgs/api"
+# hub_key = "rgs_..."
+
+# Post every new player report to a Discord channel. In Discord: channel settings >
+# Integrations > Webhooks > New Webhook > Copy Webhook URL. Keep this link secret.
+# discord_reports_webhook = "https://discord.com/api/webhooks/..."
+
+# Games on this server. Clients send X-Game-Id and X-Game-Version; anyone older than
+# min_version gets "Update <name> to keep playing". Raise both when you ship an update.
+[[games]]
+id = "lanternfall"
+name = "Lanternfall"
+latest_version = "0.3"
+min_version = "0.3"

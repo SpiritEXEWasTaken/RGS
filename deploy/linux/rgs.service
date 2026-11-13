@@ -1,0 +1,25 @@
+# systemd service for RGS on Linux. See docs/INSTALL.md.
+#   sudo cp rgs.service /etc/systemd/system/
+#   sudo systemctl enable --now rgs
+[Unit]
+Description=RGS game server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=rgs
+Group=rgs
+WorkingDirectory=/opt/rgs
+ExecStart=/opt/rgs/run-server.sh /opt/rgs
+# Scheduled restarts (and crashes) come straight back up.
+Restart=always
+RestartSec=3
+# Lock the service down: it only needs its own folder.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/rgs
+
+[Install]
+WantedBy=multi-user.target

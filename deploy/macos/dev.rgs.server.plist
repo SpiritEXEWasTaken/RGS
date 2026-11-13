@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- launchd service for RGS on a Mac (e.g. a Mac mini). See docs/INSTALL.md.
+     Change /Users/YOU/rgs to the folder holding rgs-server, then:
+       sudo cp dev.rgs.server.plist /Library/LaunchDaemons/
+       sudo launchctl bootstrap system /Library/LaunchDaemons/dev.rgs.server.plist -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.rgs.server</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/YOU/rgs/run-server.sh</string>
+        <string>/Users/YOU/rgs</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/YOU/rgs</string>
+    <key>UserName</key>
+    <string>YOU</string>
+    <!-- Start at boot, and come back after scheduled restarts and crashes. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>3</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/YOU/rgs/rgs.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/YOU/rgs/rgs.log</string>
+</dict>
+</plist>

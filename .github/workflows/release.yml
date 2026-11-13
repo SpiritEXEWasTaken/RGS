@@ -1,0 +1,77 @@
+# Pushing a tag like v0.1.0 builds RGS for every system and attaches the downloads to a GitHub
+# release. Free for public repositories.
+#
+#   git tag v0.1.0
+#   git push origin v0.1.0
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux on older Ubuntu so the binary also runs on older distros.
+          - { os: ubuntu-22.04,     target: x86_64-unknown-linux-gnu,  name: linux-x64,   ext: "" }
+          - { os: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu, name: linux-arm64, ext: "" }
+          # Apple Silicon Macs (Mac mini M1 and later) and older Intel Macs.
+          - { os: macos-latest,     target: aarch64-apple-darwin,      name: macos-arm64, ext: "" }
+          - { os: macos-latest,     target: x86_64-apple-darwin,       name: macos-x64,   ext: "" }
+          - { os: windows-latest,   target: x86_64-pc-windows-msvc,    name: windows-x64, ext: ".exe" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - run: cargo build --locked --release --target ${{ matrix.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          dir="rgs-${GITHUB_REF_NAME}-${{ matrix.name }}"
+          mkdir -p "$dir"
+          cp "target/${{ matrix.target }}/release/rgs-server${{ matrix.ext }}" "$dir/"
+          cp rgs.example.toml LICENSE README.md "$dir/"
+          cp docs/INSTALL.md docs/ERRORS.md "$dir/"
+          if [ "${{ matrix.ext }}" = ".exe" ]; then
+            cp scripts/run-server.ps1 "$dir/"
+            7z a "$dir.zip" "$dir" > /dev/null
+            echo "ASSET=$dir.zip" >> "$GITHUB_ENV"
+          else
+            cp scripts/run-server.sh "$dir/" && chmod +x "$dir/run-server.sh" "$dir/rgs-server"
+            case "${{ matrix.name }}" in
+              linux-*) cp deploy/linux/rgs.service "$dir/" ;;
+              macos-*) cp deploy/macos/dev.rgs.server.plist "$dir/" ;;
+            esac
+            tar czf "$dir.tar.gz" "$dir"
+            echo "ASSET=$dir.tar.gz" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ env.ASSET }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

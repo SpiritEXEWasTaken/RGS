@@ -1,0 +1,4 @@
+# Shell scripts must keep Unix line endings or they won't run on Mac and Linux.
+*.sh text eol=lf
+*.service text eol=lf
+*.plist text eol=lf
