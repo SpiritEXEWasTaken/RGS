@@ -36,7 +36,17 @@ struct Incoming {
     #[serde(default)]
     client_ip: String,
     body: Option<String>,
+    /// Set only by the website itself, never copied from a visitor's request: the RGS website
+    /// account that linked this server, signed in there with 2FA. It lets that account open the
+    /// admin panel with no second sign-in (see `hub_session` in admin.rs).
+    #[serde(default)]
+    linked_by: Option<String>,
 }
+
+/// A request the RGS website vouches for as coming from the account that linked this server.
+/// Only the relay socket can attach it, so a request made straight to the server can't claim it.
+#[derive(Clone)]
+pub struct LinkedBy(pub String);
 
 pub fn spawn(hub_url: String, key: String, app: Router) {
     // https://site/rgs/api -> wss://site/rgs/api/link
@@ -121,6 +131,9 @@ async fn answer(app: Router, incoming: Incoming) -> anyhow::Result<serde_json::V
     // The visitor's address as the website saw it, for rate limiting (never stored).
     let ip: IpAddr = incoming.client_ip.parse().unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
     request.extensions_mut().insert(ConnectInfo(SocketAddr::new(ip, 0)));
+    if let Some(name) = incoming.linked_by.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+        request.extensions_mut().insert(LinkedBy(name.chars().take(40).collect()));
+    }
 
     let response = app.oneshot(request).await?;
     let status = response.status().as_u16();

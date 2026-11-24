@@ -33,7 +33,7 @@ pub struct Authed {
     pub session_id: i64,
     /// This session was signed in with a 2FA code.
     pub mfa: bool,
-    /// "web", "admin", or a device name.
+    /// "web", "admin", "hub" (admin panel opened from the RGS website), or a device name.
     pub kind: String,
 }
 
@@ -90,7 +90,7 @@ pub fn client_ip(state: &AppState, headers: &HeaderMap, addr: SocketAddr) -> Str
 /// Creates a session and returns its bearer token (shown once; only its hash is stored).
 pub async fn create_session(state: &AppState, account_id: i64, kind: &str, mfa: bool) -> ApiResult<String> {
     let lifetime = match kind {
-        "admin" => state.config.admin_session_hours * 3600,
+        "admin" | "hub" => state.config.admin_session_hours * 3600,
         "web" => state.config.session_days * 86_400,
         _ => state.config.device_session_days * 86_400,
     };

@@ -79,6 +79,13 @@ does:
   after signing up. 2FA secrets are encrypted at rest with a server key.
 - **Staff must use 2FA.** Moderators, admins and owners can't open the admin panel, or use any
   admin API, without 2FA turned on, and every admin session is signed in with a 2FA code.
+- **One account for the owner's admin panel.** The RGS website account that linked a server
+  (2FA is required there) opens that server's admin panel as its owner, with no second sign-in:
+  the website vouches for it over the relay, and the server gives it an admin panel session for
+  its owner account (`POST /admin/hub-session`, which only the relay can reach; logged in the
+  audit log). Other staff sign in with their server account and its 2FA code. Set
+  `hub_admin_login = false` in `rgs.toml` to turn this off. The owner's server account is still
+  the one they play with in games.
 - Recovery codes are shown once at setup and stored hashed.
 - **Sessions:** one random bearer token per login, stored only as a hash, and revocable from
   the account page. Website logins last 30 days, headset logins 180 days, and admin panel logins

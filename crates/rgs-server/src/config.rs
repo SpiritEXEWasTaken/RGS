@@ -32,6 +32,10 @@ pub struct Config {
     pub hub_url: Option<String>,
     /// This server's key from "Link a server" on the RGS website. Keep it secret.
     pub hub_key: Option<String>,
+    /// The RGS website account that linked this server opens its admin panel as the server's
+    /// owner, with no second sign-in (that account always has 2FA). When false, everyone signs
+    /// in to the admin panel with a server account and its 2FA code.
+    pub hub_admin_login: bool,
 }
 
 impl Default for Config {
@@ -50,6 +54,7 @@ impl Default for Config {
             discord_reports_webhook: None,
             hub_url: None,
             hub_key: None,
+            hub_admin_login: true,
         }
     }
 }

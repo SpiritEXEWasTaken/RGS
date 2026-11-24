@@ -26,6 +26,7 @@ Shown in-game as `Error: <message>`, for example:
 | `bad_request` | 400 | Something in the request is wrong | Usernames are 3 to 20 letters, numbers or underscores. |
 | `conflict` | 409 | Already exists or already done | That username is taken. |
 | `not_found` | 404 | No such thing | Not found. |
+| `no_owner` | 409 | A brand-new server has no owner account yet (admin panel only) | This server has no owner account yet. Create it first. |
 | `internal` | 500 | A bug or outage on the server | Something went wrong on the server. |
 
 When the server can't be reached at all, there's no response to read, so games show their own

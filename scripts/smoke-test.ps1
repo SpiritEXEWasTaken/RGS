@@ -66,6 +66,9 @@ $stats = Call GET "/admin/stats" $null $admin
 Check "admin stats with admin session" ($stats.ok -and $stats.data.accounts -eq 1)
 $statsWeb = Call GET "/admin/stats" $null $tok
 Check "admin API refused with normal session (403)" (-not $statsWeb.ok -and $statsWeb.status -eq 403)
+# Only the RGS website, over the relay, can open the panel for the owner without a sign-in.
+$hubDirect = Call POST "/admin/hub-session" $null $null
+Check "website-only panel sign-in refused when called directly" (-not $hubDirect.ok -and $hubDirect.status -eq 403)
 
 $p = Call POST "/auth/register" @{ username = "player_two"; password = "hunter2hunter2" }
 Check "second account is a player" ($p.ok -and $p.data.account.role -eq "player")

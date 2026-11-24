@@ -29,6 +29,8 @@ The server only serves its API. Its admin panel and player pages live on the RGS
 (https://spiritexe.pages.dev/rgs/): make an account there, link your server, and
 put the two lines it gives you (`hub_url`, `hub_key`) in `rgs.toml`. The server then connects out to
 the website, so the panel, player sign-in and games reach it from anywhere, with no ports opened.
+Your RGS website account is also your admin panel login: open the panel from your server list and
+you're in as the server's owner, with no second account to sign in with.
 Settings go in `rgs.toml` (see `rgs.example.toml`).
 
 To run it as a service on Linux, a Mac (like a Mac mini) or Windows, see

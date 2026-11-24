@@ -20,6 +20,8 @@ pub enum ApiError {
     UpdateRequired(String),
     /// The server is down for maintenance or rebooting.
     Maintenance(String),
+    /// A brand-new server with no owner account yet.
+    NoOwner,
     Internal(anyhow::Error),
 }
 
@@ -37,6 +39,7 @@ impl IntoResponse for ApiError {
             ApiError::TooManyRequests => (StatusCode::TOO_MANY_REQUESTS, "rate_limited", "Too many tries. Wait a minute.".into()),
             ApiError::UpdateRequired(m) => (StatusCode::UPGRADE_REQUIRED, "update_required", m),
             ApiError::Maintenance(m) => (StatusCode::SERVICE_UNAVAILABLE, "maintenance", m),
+            ApiError::NoOwner => (StatusCode::CONFLICT, "no_owner", "This server has no owner account yet. Create it first.".into()),
             ApiError::Internal(e) => {
                 tracing::error!("internal error: {e:#}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal", "Something went wrong on the server.".into())

@@ -19,8 +19,9 @@ especially `secret.key`: without it, everyone's 2FA stops working.
 
 Then link it to the RGS website: at https://spiritexe.pages.dev/rgs/servers/
 make an account (2FA required), press **Link server**, and add the two lines it shows to
-`rgs.toml`. Restart RGS, then open the server's **Admin panel** from that page and create the
-owner account (the first account on a server becomes its owner).
+`rgs.toml`. Restart RGS, then open the server's **Admin panel** from that page. Your website
+account signs you in to it (no second login). The first time, it asks you to create the server's
+owner account: the username and password you'll play with in games.
 
 ## Linux (systemd)
 

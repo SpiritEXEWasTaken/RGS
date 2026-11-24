@@ -1,21 +1,25 @@
-//! Admin API, used by the admin panel. Every route needs a staff member signed in to the admin
-//! panel with a 2FA code. Staff can only act on people below their own role, and everything
-//! they change goes in the audit log.
+//! Admin API, used by the admin panel. Every route needs a staff member in an admin panel
+//! session: either the owner, opening the panel from their RGS website account (one account,
+//! signed in there with 2FA), or any staff member signed in here with a server account and its
+//! 2FA code. Staff can only act on people below their own role, and everything they change goes
+//! in the audit log.
 
 use crate::accounts::{self, Role, PERMANENT};
-use crate::auth::Authed;
+use crate::auth::{self, Authed};
 use crate::error::{ApiError, ApiResult};
+use crate::relay::LinkedBy;
 use crate::state::{now, AppState};
 use axum::extract::{FromRequestParts, Path, Query, State};
 use axum::http::request::Parts;
 use axum::routing::{get, post};
-use axum::{async_trait, Json, Router};
+use axum::{async_trait, Extension, Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::Row;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .route("/hub-session", post(hub_session))
         .route("/stats", get(stats))
         .route("/accounts", get(list_accounts))
         .route("/accounts/:id/role", post(set_role))
@@ -24,7 +28,7 @@ pub fn routes() -> Router<AppState> {
         .route("/audit", get(audit_log))
 }
 
-/// A staff member in an admin panel session that was signed in with 2FA.
+/// A staff member in an admin panel session signed in with 2FA (here, or on the RGS website).
 pub struct Staff(pub Authed);
 
 #[async_trait]
@@ -36,11 +40,35 @@ impl FromRequestParts<AppState> for Staff {
         if !auth.account.role.is_staff() {
             return Err(ApiError::Forbidden("Only staff can use the admin panel.".into()));
         }
-        if auth.kind != "admin" || !auth.mfa || !auth.account.mfa_enabled {
+        let signed_in_here = auth.kind == "admin" && auth.mfa && auth.account.mfa_enabled;
+        // The website already checked 2FA; it only ever vouches for the server's owner.
+        let from_website = auth.kind == "hub" && auth.mfa && auth.account.role == Role::Owner && state.config.hub_admin_login;
+        if !signed_in_here && !from_website {
             return Err(ApiError::Forbidden("Sign in to the admin panel with your 2FA code.".into()));
         }
         Ok(Staff(auth))
     }
+}
+
+/// The admin panel opened from the RGS website by the account that linked this server. The
+/// website signed that account in with 2FA and vouches for it over the relay (see relay.rs), so
+/// it gets an admin panel session as this server's owner with no second sign-in.
+async fn hub_session(State(state): State<AppState>, linked_by: Option<Extension<LinkedBy>>) -> ApiResult<Json<Value>> {
+    let Some(Extension(LinkedBy(website_account))) = linked_by else {
+        return Err(ApiError::Forbidden("Open the admin panel from your servers on the RGS website.".into()));
+    };
+    if !state.config.hub_admin_login {
+        return Err(ApiError::Forbidden("This server turned off admin panel sign-in through the RGS website. Sign in with your server account.".into()));
+    }
+    let owner_id: i64 = sqlx::query("SELECT id FROM accounts WHERE role = 'owner' ORDER BY id LIMIT 1")
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or(ApiError::NoOwner)?
+        .get("id");
+    let owner = accounts::by_id(&state.db, owner_id).await?.ok_or(ApiError::NoOwner)?;
+    let token = auth::create_session(&state, owner.id, "hub", true).await?;
+    accounts::audit(&state.db, owner.id, "website_sign_in", None, &format!("admin panel opened from RGS website account {website_account}")).await?;
+    Ok(Json(json!({ "token": token, "account": owner.public_json() })))
 }
 
 async fn stats(State(state): State<AppState>, _staff: Staff) -> ApiResult<Json<Value>> {

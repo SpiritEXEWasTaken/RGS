@@ -33,6 +33,11 @@ restart_grace_seconds = 20
 # hub_url = "https://spiritexe.pages.dev/rgs/api"
 # hub_key = "rgs_..."
 
+# The website account that linked this server opens its admin panel as the owner, with no
+# second sign-in (one account; it always has 2FA). Set to false to make everyone, the owner
+# included, sign in to the admin panel with a server account and its 2FA code.
+hub_admin_login = true
+
 # Post every new player report to a Discord channel. In Discord: channel settings >
 # Integrations > Webhooks > New Webhook > Copy Webhook URL. Keep this link secret.
 # discord_reports_webhook = "https://discord.com/api/webhooks/..."
