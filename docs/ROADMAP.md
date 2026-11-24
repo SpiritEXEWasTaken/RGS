@@ -25,6 +25,7 @@ Each milestone is usable on its own. Lanternfall moves over as milestones land.
 - [x] Relay: servers connect out, so the website reaches them from anywhere (no tunnel or ports)
 - [x] Admin panel and player pages moved from the server to the website
 - [x] One account: your RGS website account opens your server's admin panel as its owner (no second sign-in)
+- [x] "Keep me signed in" on the website, hijack-resistant sign-ins, and sudo mode (a 2FA code once) for big actions
 
 ## M3: Saves and moderation (mostly done)
 - [x] Cloud saves (named slots per game)

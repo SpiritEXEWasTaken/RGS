@@ -7,7 +7,7 @@
 //! it starts. A restart stops the server `restart_grace_seconds` after it starts, and the run
 //! script (scripts/run-server.ps1) starts it again, swapping in a new build if one is waiting.
 
-use crate::admin::Staff;
+use crate::admin::{SudoStaff, Staff};
 use crate::accounts::{self, Role};
 use crate::error::{ApiError, ApiResult};
 use crate::state::{now, AppState};
@@ -184,7 +184,7 @@ fn yes() -> bool {
     true
 }
 
-async fn schedule(State(state): State<AppState>, staff: Staff, Json(body): Json<ScheduleBody>) -> ApiResult<Json<Value>> {
+async fn schedule(State(state): State<AppState>, SudoStaff(staff): SudoStaff, Json(body): Json<ScheduleBody>) -> ApiResult<Json<Value>> {
     if staff.0.account.role < Role::Admin {
         return Err(ApiError::Forbidden("Only admins can schedule maintenance.".into()));
     }
@@ -205,7 +205,7 @@ async fn schedule(State(state): State<AppState>, staff: Staff, Json(body): Json<
     Ok(Json(json!({ "ok": true, "maintenance": m })))
 }
 
-async fn cancel(State(state): State<AppState>, staff: Staff) -> ApiResult<Json<Value>> {
+async fn cancel(State(state): State<AppState>, SudoStaff(staff): SudoStaff) -> ApiResult<Json<Value>> {
     if staff.0.account.role < Role::Admin {
         return Err(ApiError::Forbidden("Only admins can end maintenance.".into()));
     }

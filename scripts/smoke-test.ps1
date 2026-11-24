@@ -93,6 +93,17 @@ Check "device code only works once" (-not $poll3.ok)
 # Moderation
 $list = Call GET "/admin/accounts?q=player" $null $admin
 $pid2 = $list.data.accounts[0].id
+# Sudo mode: big actions need a fresh 2FA code once per admin panel session.
+$noSudo = Call POST "/admin/accounts/$pid2/role" @{ role = "moderator" } $admin
+Check "role change asks for sudo mode first (403)" (-not $noSudo.ok -and $noSudo.status -eq 403 -and $noSudo.data -match "sudo_required")
+$noSudoMaint = Call POST "/admin/maintenance" @{ in_minutes = 60; reason = "x"; restart = $false } $admin
+Check "maintenance asks for sudo mode first (403)" (-not $noSudoMaint.ok -and $noSudoMaint.data -match "sudo_required")
+$sudoBad = Call POST "/auth/sudo" @{ code = "000000" } $admin
+Check "sudo refused with a wrong code" (-not $sudoBad.ok)
+$sudoWeb = Call POST "/auth/sudo" @{ code = (Totp $setup.data.secret) } $tok
+Check "sudo refused for a normal (non-admin) session" (-not $sudoWeb.ok)
+$sudo = Call POST "/auth/sudo" @{ code = (Totp $setup.data.secret) } $admin
+Check "sudo mode with the 2FA code" ($sudo.ok -and (Call GET "/auth/me" $null $admin).data.session.sudo)
 $role = Call POST "/admin/accounts/$pid2/role" @{ role = "moderator" } $admin
 Check "owner makes player a moderator" $role.ok
 $ownerRole = Call POST "/admin/accounts/$pid2/role" @{ role = "owner" } $admin

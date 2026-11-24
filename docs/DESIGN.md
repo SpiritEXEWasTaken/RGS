@@ -86,6 +86,17 @@ does:
   audit log). Other staff sign in with their server account and its 2FA code. Set
   `hub_admin_login = false` in `rgs.toml` to turn this off. The owner's server account is still
   the one they play with in games.
+- **Sudo mode (like GitHub's).** Bans, unbans, role changes and maintenance need a fresh 2FA
+  code once per admin panel session (`POST /auth/sudo`, or for sessions opened from the website,
+  the website's own sudo mode, which it passes over the relay). The panel keeps its session only
+  while its tab is open, so sudo mode ends when you leave the site. Otherwise these answer
+  `sudo_required`.
+- **RGS website sign-ins** (the hub, not this server): an HttpOnly, `__Host-`, SameSite=Strict
+  cookie whose token changes hourly; reusing a replaced token (a copied cookie) ends the
+  sign-in. Sign-ins only work in the browser they were made in. "Keep me signed in" lasts until a
+  week without a visit (30 days at most); otherwise the cookie ends with the browser session
+  (12 hours at most). Changing the password or 2FA ends every other sign-in, and the admin panel
+  sessions the website opened on the account's servers (`POST /admin/hub-signout`, relay only).
 - Recovery codes are shown once at setup and stored hashed.
 - **Sessions:** one random bearer token per login, stored only as a hash, and revocable from
   the account page. Website logins last 30 days, headset logins 180 days, and admin panel logins

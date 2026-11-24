@@ -41,12 +41,20 @@ struct Incoming {
     /// admin panel with no second sign-in (see `hub_session` in admin.rs).
     #[serde(default)]
     linked_by: Option<String>,
+    /// Also set only by the website: that account just confirmed a fresh 2FA code there (sudo
+    /// mode), so big admin actions are allowed.
+    #[serde(default)]
+    sudo: bool,
 }
 
 /// A request the RGS website vouches for as coming from the account that linked this server.
 /// Only the relay socket can attach it, so a request made straight to the server can't claim it.
 #[derive(Clone)]
-pub struct LinkedBy(pub String);
+pub struct LinkedBy {
+    pub name: String,
+    /// The website account is in sudo mode (confirmed a fresh 2FA code).
+    pub sudo: bool,
+}
 
 pub fn spawn(hub_url: String, key: String, app: Router) {
     // https://site/rgs/api -> wss://site/rgs/api/link
@@ -132,7 +140,7 @@ async fn answer(app: Router, incoming: Incoming) -> anyhow::Result<serde_json::V
     let ip: IpAddr = incoming.client_ip.parse().unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
     request.extensions_mut().insert(ConnectInfo(SocketAddr::new(ip, 0)));
     if let Some(name) = incoming.linked_by.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
-        request.extensions_mut().insert(LinkedBy(name.chars().take(40).collect()));
+        request.extensions_mut().insert(LinkedBy { name: name.chars().take(40).collect(), sudo: incoming.sudo });
     }
 
     let response = app.oneshot(request).await?;

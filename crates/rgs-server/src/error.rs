@@ -22,6 +22,8 @@ pub enum ApiError {
     Maintenance(String),
     /// A brand-new server with no owner account yet.
     NoOwner,
+    /// A big admin action (ban, role, maintenance) needs a fresh 2FA code first.
+    SudoRequired,
     Internal(anyhow::Error),
 }
 
@@ -40,6 +42,7 @@ impl IntoResponse for ApiError {
             ApiError::UpdateRequired(m) => (StatusCode::UPGRADE_REQUIRED, "update_required", m),
             ApiError::Maintenance(m) => (StatusCode::SERVICE_UNAVAILABLE, "maintenance", m),
             ApiError::NoOwner => (StatusCode::CONFLICT, "no_owner", "This server has no owner account yet. Create it first.".into()),
+            ApiError::SudoRequired => (StatusCode::FORBIDDEN, "sudo_required", "Enter your 2FA code to do that.".into()),
             ApiError::Internal(e) => {
                 tracing::error!("internal error: {e:#}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal", "Something went wrong on the server.".into())

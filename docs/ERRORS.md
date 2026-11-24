@@ -27,6 +27,7 @@ Shown in-game as `Error: <message>`, for example:
 | `conflict` | 409 | Already exists or already done | That username is taken. |
 | `not_found` | 404 | No such thing | Not found. |
 | `no_owner` | 409 | A brand-new server has no owner account yet (admin panel only) | This server has no owner account yet. Create it first. |
+| `sudo_required` | 403 | A big admin action (ban, role change, maintenance) needs a fresh 2FA code (sudo mode) first | Enter your 2FA code to do that. |
 | `internal` | 500 | A bug or outage on the server | Something went wrong on the server. |
 
 When the server can't be reached at all, there's no response to read, so games show their own

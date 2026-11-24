@@ -20,6 +20,7 @@ use sqlx::Row;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/hub-session", post(hub_session))
+        .route("/hub-signout", post(hub_signout))
         .route("/stats", get(stats))
         .route("/accounts", get(list_accounts))
         .route("/accounts/:id/role", post(set_role))
@@ -50,11 +51,29 @@ impl FromRequestParts<AppState> for Staff {
     }
 }
 
+/// A staff member in sudo mode, like GitHub's: big actions (bans, roles, maintenance) need a
+/// fresh 2FA code once per admin panel session, which the panel keeps only while its tab is open.
+pub struct SudoStaff(pub Staff);
+
+#[async_trait]
+impl FromRequestParts<AppState> for SudoStaff {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+        let staff = Staff::from_request_parts(parts, state).await?;
+        if !staff.0.sudo {
+            return Err(ApiError::SudoRequired);
+        }
+        Ok(SudoStaff(staff))
+    }
+}
+
 /// The admin panel opened from the RGS website by the account that linked this server. The
 /// website signed that account in with 2FA and vouches for it over the relay (see relay.rs), so
-/// it gets an admin panel session as this server's owner with no second sign-in.
+/// it gets an admin panel session as this server's owner with no second sign-in. When the website
+/// also checked a fresh 2FA code (sudo mode there), the session starts in sudo mode.
 async fn hub_session(State(state): State<AppState>, linked_by: Option<Extension<LinkedBy>>) -> ApiResult<Json<Value>> {
-    let Some(Extension(LinkedBy(website_account))) = linked_by else {
+    let Some(Extension(LinkedBy { name: website_account, sudo })) = linked_by else {
         return Err(ApiError::Forbidden("Open the admin panel from your servers on the RGS website.".into()));
     };
     if !state.config.hub_admin_login {
@@ -66,9 +85,24 @@ async fn hub_session(State(state): State<AppState>, linked_by: Option<Extension<
         .ok_or(ApiError::NoOwner)?
         .get("id");
     let owner = accounts::by_id(&state.db, owner_id).await?.ok_or(ApiError::NoOwner)?;
-    let token = auth::create_session(&state, owner.id, "hub", true).await?;
-    accounts::audit(&state.db, owner.id, "website_sign_in", None, &format!("admin panel opened from RGS website account {website_account}")).await?;
-    Ok(Json(json!({ "token": token, "account": owner.public_json() })))
+    let token = auth::create_session_with(&state, owner.id, "hub", true, sudo).await?;
+    let mode = if sudo { " in sudo mode" } else { "" };
+    accounts::audit(&state.db, owner.id, "website_sign_in", None, &format!("admin panel opened{mode} from RGS website account {website_account}")).await?;
+    Ok(Json(json!({ "token": token, "account": owner.public_json(), "sudo": sudo })))
+}
+
+/// The RGS website ending every admin panel session it opened here, after its account changed
+/// its password or 2FA (or signed out everywhere). Like `hub_session`, only the relay can ask.
+async fn hub_signout(State(state): State<AppState>, linked_by: Option<Extension<LinkedBy>>) -> ApiResult<Json<Value>> {
+    let Some(Extension(LinkedBy { name: website_account, .. })) = linked_by else {
+        return Err(ApiError::Forbidden("Only the RGS website can do that.".into()));
+    };
+    let done = sqlx::query("DELETE FROM sessions WHERE kind = 'hub'").execute(&state.db).await?;
+    if let Some(owner) = sqlx::query("SELECT id FROM accounts WHERE role = 'owner' ORDER BY id LIMIT 1").fetch_optional(&state.db).await? {
+        let details = format!("{} admin panel sessions ended by RGS website account {website_account}", done.rows_affected());
+        accounts::audit(&state.db, owner.get("id"), "website_sign_out", None, &details).await?;
+    }
+    Ok(Json(json!({ "ok": true, "ended": done.rows_affected() })))
 }
 
 async fn stats(State(state): State<AppState>, _staff: Staff) -> ApiResult<Json<Value>> {
@@ -114,7 +148,7 @@ struct RoleBody {
     role: String,
 }
 
-async fn set_role(State(state): State<AppState>, staff: Staff, Path(id): Path<i64>, Json(body): Json<RoleBody>) -> ApiResult<Json<Value>> {
+async fn set_role(State(state): State<AppState>, SudoStaff(staff): SudoStaff, Path(id): Path<i64>, Json(body): Json<RoleBody>) -> ApiResult<Json<Value>> {
     let me = staff.0.account.role;
     if me < Role::Admin {
         return Err(ApiError::Forbidden("Only admins can change roles.".into()));
@@ -141,7 +175,7 @@ struct BanBody {
     reason: String,
 }
 
-async fn ban(State(state): State<AppState>, staff: Staff, Path(id): Path<i64>, Json(body): Json<BanBody>) -> ApiResult<Json<Value>> {
+async fn ban(State(state): State<AppState>, SudoStaff(staff): SudoStaff, Path(id): Path<i64>, Json(body): Json<BanBody>) -> ApiResult<Json<Value>> {
     let reason = body.reason.trim();
     if reason.is_empty() {
         return Err(ApiError::BadRequest("Give a reason.".into()));
@@ -161,7 +195,7 @@ async fn ban(State(state): State<AppState>, staff: Staff, Path(id): Path<i64>, J
     Ok(Json(json!({ "ok": true })))
 }
 
-async fn unban(State(state): State<AppState>, staff: Staff, Path(id): Path<i64>) -> ApiResult<Json<Value>> {
+async fn unban(State(state): State<AppState>, SudoStaff(staff): SudoStaff, Path(id): Path<i64>) -> ApiResult<Json<Value>> {
     target_below(&state, &staff, id).await?;
     sqlx::query("UPDATE accounts SET banned_until = NULL, ban_reason = NULL WHERE id = ?").bind(id).execute(&state.db).await?;
     accounts::audit(&state.db, staff.0.account.id, "unban", Some(id), "").await?;

@@ -25,6 +25,7 @@ pub fn routes() -> Router<AppState> {
         .route("/auth/me", get(me))
         .route("/auth/sessions", get(list_sessions))
         .route("/auth/sessions/:id", delete(revoke_session))
+        .route("/auth/sudo", post(sudo))
 }
 
 /// A signed-in request: the account and the session it used.
@@ -33,6 +34,8 @@ pub struct Authed {
     pub session_id: i64,
     /// This session was signed in with a 2FA code.
     pub mfa: bool,
+    /// Sudo mode: a 2FA code was confirmed for big admin actions (bans, roles, maintenance).
+    pub sudo: bool,
     /// "web", "admin", "hub" (admin panel opened from the RGS website), or a device name.
     pub kind: String,
 }
@@ -49,7 +52,7 @@ impl FromRequestParts<AppState> for Authed {
             .and_then(|v| v.strip_prefix("Bearer "))
             .ok_or_else(|| ApiError::Unauthorized("Sign in first.".into()))?;
 
-        let row = sqlx::query("SELECT id, account_id, mfa, kind FROM sessions WHERE token_hash = ? AND expires_at > ?")
+        let row = sqlx::query("SELECT id, account_id, mfa, kind, sudo FROM sessions WHERE token_hash = ? AND expires_at > ?")
             .bind(crypto::sha256_hex(token))
             .bind(now())
             .fetch_optional(&state.db)
@@ -64,7 +67,13 @@ impl FromRequestParts<AppState> for Authed {
         }
         sqlx::query("UPDATE accounts SET last_seen_at = ? WHERE id = ?").bind(now()).bind(account.id).execute(&state.db).await?;
 
-        Ok(Authed { session_id: row.get("id"), mfa: row.get::<i64, _>("mfa") != 0, kind: row.get("kind"), account })
+        Ok(Authed {
+            session_id: row.get("id"),
+            mfa: row.get::<i64, _>("mfa") != 0,
+            sudo: row.get::<i64, _>("sudo") != 0,
+            kind: row.get("kind"),
+            account,
+        })
     }
 }
 
@@ -89,17 +98,23 @@ pub fn client_ip(state: &AppState, headers: &HeaderMap, addr: SocketAddr) -> Str
 
 /// Creates a session and returns its bearer token (shown once; only its hash is stored).
 pub async fn create_session(state: &AppState, account_id: i64, kind: &str, mfa: bool) -> ApiResult<String> {
+    create_session_with(state, account_id, kind, mfa, false).await
+}
+
+/// Like `create_session`, optionally already in sudo mode (the RGS website checked a 2FA code).
+pub async fn create_session_with(state: &AppState, account_id: i64, kind: &str, mfa: bool, sudo: bool) -> ApiResult<String> {
     let lifetime = match kind {
         "admin" | "hub" => state.config.admin_session_hours * 3600,
         "web" => state.config.session_days * 86_400,
         _ => state.config.device_session_days * 86_400,
     };
     let token = crypto::new_token();
-    sqlx::query("INSERT INTO sessions (account_id, token_hash, mfa, kind, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)")
+    sqlx::query("INSERT INTO sessions (account_id, token_hash, mfa, kind, sudo, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .bind(account_id)
         .bind(crypto::sha256_hex(&token))
         .bind(mfa as i64)
         .bind(kind)
+        .bind(sudo as i64)
         .bind(now())
         .bind(now() + lifetime)
         .execute(&state.db)
@@ -247,6 +262,32 @@ async fn login_2fa(State(state): State<AppState>, Json(body): Json<Login2faBody>
     Ok(Json(json!({ "token": token, "account": account.public_json() })))
 }
 
+#[derive(Deserialize)]
+struct SudoBody {
+    /// A 6-digit authenticator code, or one of the recovery codes.
+    code: String,
+}
+
+/// Sudo mode for an admin panel session signed in here: confirm a 2FA code once, and big
+/// actions (bans, roles, maintenance) work until the session ends. Sessions opened from the
+/// RGS website get sudo mode there instead, from the website account's 2FA.
+async fn sudo(State(state): State<AppState>, auth: Authed, Json(body): Json<SudoBody>) -> ApiResult<Json<Value>> {
+    if auth.kind == "hub" {
+        return Err(ApiError::Forbidden("Confirm with your RGS website account's 2FA code.".into()));
+    }
+    if auth.kind != "admin" || !auth.account.mfa_enabled {
+        return Err(ApiError::Forbidden("Sign in to the admin panel with your 2FA code first.".into()));
+    }
+    if !state.auth_limit.allow(&format!("mfa:{}", auth.account.id)) {
+        return Err(ApiError::TooManyRequests);
+    }
+    if !mfa::check_code(&state, &auth.account, &body.code).await? {
+        return Err(ApiError::Unauthorized("That code didn't work.".into()));
+    }
+    sqlx::query("UPDATE sessions SET sudo = 1 WHERE id = ?").bind(auth.session_id).execute(&state.db).await?;
+    Ok(Json(json!({ "ok": true, "sudo": true })))
+}
+
 async fn logout(State(state): State<AppState>, auth: Authed) -> ApiResult<Json<Value>> {
     sqlx::query("DELETE FROM sessions WHERE id = ?").bind(auth.session_id).execute(&state.db).await?;
     Ok(Json(json!({ "ok": true })))
@@ -254,7 +295,7 @@ async fn logout(State(state): State<AppState>, auth: Authed) -> ApiResult<Json<V
 
 async fn me(auth: Authed) -> Json<Value> {
     let mut account = auth.account.public_json();
-    account["session"] = json!({ "kind": auth.kind, "mfa": auth.mfa });
+    account["session"] = json!({ "kind": auth.kind, "mfa": auth.mfa, "sudo": auth.sudo });
     Json(account)
 }
 
